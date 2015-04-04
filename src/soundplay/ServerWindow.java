@@ -35,7 +35,7 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
      * Creates new form serverWindow2
      */
     
-    ConnAcceptor connAcceptor;
+    public ConnAcceptor connAcceptor;
     PingResponder pingResponder;
     SoundWindow parent;
     final private int PING_PORT = 3001;
@@ -74,9 +74,9 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
         onlineList.setModel(new javax.swing.AbstractListModel() {
-            //String[] strings = { };
-            public int getSize() { return connAcceptor.conns.size(); }
-            public String getElementAt(int i) { return connAcceptor.conns.get(i).conn.getInetAddress().getHostAddress() + ":" + connAcceptor.conns.get(i).conn.getPort(); }
+            //    String[] strings = {};
+            public int getSize() { return connAcceptor.getConnStrings().size(); }
+            public String getElementAt(int i) { return connAcceptor.getConnStrings().get(i); }
         });
         jScrollPane1.setViewportView(onlineList);
 
@@ -115,6 +115,10 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
         dispose();
     }//GEN-LAST:event_exitButtonActionPerformed
 
+    synchronized void refreshOnlineList() {
+        onlineList.updateUI();
+    }
+    
     /**
      * @param args the command line arguments
      */
@@ -177,7 +181,7 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
      * 
      */
     private void listenForConnections(int port) {
-        connAcceptor = new ConnAcceptor(port);
+        connAcceptor = new ConnAcceptor(port, this);
         connAcceptor.start();
     }
 
@@ -240,8 +244,28 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
         volatile boolean stop;
         volatile ArrayList<ChatConnection> conns = new ArrayList<>();
         volatile ServerSocket s;
-        public ConnAcceptor(int port) {
+        ArrayList<String> connStrings = new ArrayList<>();
+        ServerWindow parent;
+        
+        public ConnAcceptor(int port, ServerWindow par) {
             p = port;
+            parent = par;
+        }
+        
+        synchronized private ArrayList<String> getConnStrings() {
+            return connStrings;
+        }
+        
+        synchronized private void addToConns(ChatConnection newConn){
+            conns.add(newConn);
+            regenConnStrings();
+        }
+        synchronized private void regenConnStrings() {
+            connStrings.clear();
+            for(ChatConnection i : conns)
+                connStrings.add(i.getConnName() + "="
+                + i.conn.getInetAddress().getHostAddress() + ":"
+                + i.conn.getPort());
         }
 
         @Override
@@ -259,8 +283,8 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
                     Socket newConn = s.accept();
                     System.out.println("new client at: " + newConn.getInetAddress() + ":" + newConn.getPort());
                     ChatConnection chatConn = new ChatConnection(newConn, this);
-                    conns.add(chatConn);
-                    onlineList.updateUI();
+                    addToConns(chatConn);
+                    parent.refreshOnlineList();
                     chatConn.start();
                 } catch (IOException ex) {
                     System.out.println("Socket to accept connections closed or error occurred");
@@ -278,7 +302,7 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
             }
         }
 
-        private Iterable<ChatConnection> getConnList() {
+        Iterable<ChatConnection> getConnList() {
             return conns;
         }
     }
@@ -292,10 +316,11 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
         volatile OutputStream out;
         volatile ObjectOutputStream oos;
         volatile ObjectInputStream ois;
-        String name;
+        volatile String name;
         volatile boolean stop;
         
         public ChatConnection(Socket givenConn, ConnAcceptor parentRef) throws IOException {
+            name = "anon";
             conn = givenConn;
             parent = parentRef;
             in = conn.getInputStream();
@@ -308,6 +333,24 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
             oos.writeObject(msg);
         }
 
+        synchronized String getConnName() {
+            return name;
+        }
+        
+        synchronized void setConnName(String inName) {
+            name = inName;
+        }
+        
+        void changeName(String newName) throws IOException {
+            if(newName == null || newName.length() == 0)
+                return;
+            setConnName(newName);
+            parent.regenConnStrings();
+            parent.parent.refreshOnlineList();
+            Message m = new Message(getConnName(), "/name:" + newName);
+            writeMessage(m);
+        }
+        
         void close() throws IOException {
             stop = true;
             conn.close();
@@ -323,16 +366,18 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
 
                     Message m ;
                     m = (Message) ois.readObject();
-                    
-//                    if(m.name != null && m.name.equals(name))
-//                    {
-//                        name = m.name;
-//                        onlineList.updateUI();
-//                    }
-                        
-                    
-                    
-//                    System.out.println(m.toReadableString());
+                    if(m.msg != null)
+                    {
+                        if(m.msg.startsWith("/"))
+                        {
+                            if(m.msg.startsWith("/nick "))
+                                changeName(m.msg.substring("/nick ".length()));
+                            else if(m.msg.contentEquals("/list"))
+                                serveList();
+                            else
+                                writeMessage(new Message(m.name, "/command does not exist"));
+                        }
+                    }
                     
                     for(ChatConnection eachConn : parent.getConnList())
                     {
@@ -347,10 +392,19 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
                     Logger.getLogger(ServerWindow.class.getName()).log(Level.SEVERE, null, ex);
                     System.out.println("removing " + name + " from connection list");
                     parent.conns.remove(this);
-                    onlineList.updateUI();
+                    parent.parent.refreshOnlineList();
                     break;
                 }
             }
+        }
+
+        private void serveList() throws IOException {
+            StringBuilder s = new StringBuilder();
+            s.append("/list:");
+            for(String i : parent.getConnStrings())
+                s.append(i.substring(0, i.lastIndexOf('='))).append(",");
+            Message m = new Message(name, s.toString());
+            writeMessage(m);
         }
     }
 }

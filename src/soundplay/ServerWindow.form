@@ -55,7 +55,7 @@
         <Component class="javax.swing.JList" name="onlineList">
           <Properties>
             <Property name="model" type="javax.swing.ListModel" editor="org.netbeans.modules.form.RADConnectionPropertyEditor">
-              <Connection code="new javax.swing.AbstractListModel() {&#xa;    //String[] strings = { };&#xa;    public int getSize() { return connAcceptor.conns.size(); }&#xa;    public String getElementAt(int i) { return connAcceptor.conns.get(i).conn.getInetAddress().getHostAddress() + &quot;:&quot; + connAcceptor.conns.get(i).conn.getPort(); }&#xa;}" type="code"/>
+              <Connection code="new javax.swing.AbstractListModel() {&#xa;    //    String[] strings = {};&#xa;    public int getSize() { return connAcceptor.getConnStrings().size(); }&#xa;    public String getElementAt(int i) { return connAcceptor.getConnStrings().get(i); }&#xa;}" type="code"/>
             </Property>
           </Properties>
         </Component>
