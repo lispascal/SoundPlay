@@ -6,15 +6,13 @@
 
 package soundplay;
 
-import java.awt.event.ActionListener;
+
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -40,6 +38,8 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
     private Thread dst;
     private Socket sock2;
     ArrayList<String> names;
+    final private String SERVER_NAME = "SERVER";
+    
     /**
      * Creates new form ClientWindow
      */
@@ -51,8 +51,9 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
         names = new ArrayList<>();
         sw = soundWindow;
         initComponents();
-        nameField.setText(name);
-        connectToServer(port, serverIP, serverPort);
+//        nameField.setText(name);
+        if(!connectToServer(port, serverIP, serverPort, name))
+            close(); // close out of window if it couldn't connect successfully
         messageBox.addKeyListener(new KeyAdapter(){
             public void keyPressed(KeyEvent e) {
                 //System.out.println("keypress found: " + e.getKeyCode());
@@ -85,7 +86,6 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
         jScrollPane2 = new javax.swing.JScrollPane();
         userList = new javax.swing.JList();
         userLabel = new javax.swing.JLabel();
-        nameField = new javax.swing.JTextField();
         messageBox = new javax.swing.JTextField();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
@@ -116,31 +116,22 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
 
         userLabel.setText("Users (unfunctional)");
 
-        nameField.setText("Name");
-        nameField.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                nameFieldActionPerformed(evt);
-            }
-        });
-
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(messageBox)
                     .addGroup(layout.createSequentialGroup()
                         .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 414, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addComponent(userLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE)))
-                    .addGroup(layout.createSequentialGroup()
-                        .addComponent(nameField, javax.swing.GroupLayout.PREFERRED_SIZE, 43, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(messageBox)))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                            .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE))
+                        .addGap(0, 0, Short.MAX_VALUE)))
+                .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -153,18 +144,12 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 200, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(nameField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(messageBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addComponent(messageBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
-
-    private void nameFieldActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_nameFieldActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_nameFieldActionPerformed
 
     private void chatAreaCaretUpdate(javax.swing.event.CaretEvent evt) {//GEN-FIRST:event_chatAreaCaretUpdate
         // TODO add your handling code here:
@@ -214,12 +199,12 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JTextField messageBox;
-    private javax.swing.JTextField nameField;
     private javax.swing.JLabel userLabel;
     private javax.swing.JList userList;
     // End of variables declaration//GEN-END:variables
 
-    private void connectToServer(int port, InetAddress serverIP, int serverPort) {
+    
+    private boolean connectToServer(int port, InetAddress serverIP, int serverPort, String nameDesired) {
         try {
 //            System.out.println(InetAddress.getLocalHost());
             System.out.println("Creating client side socket for:" + serverIP + ":" + serverPort);
@@ -231,8 +216,10 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
             out = sock.getOutputStream();
             recv = new Receiver(this);
             recv.start();
-            sw.getPubSpkr(out, nameField.getText());
+            sw.getPubSpkr(out);
             
+            sendMessage("/name " + nameDesired);
+            sendMessage("/list");
 //            sock2 = new Socket(serverIP, serverPort);
 //            InputStream in2 = sock2.getInputStream();
 //            OutputStream out2 = sock2.getOutputStream();
@@ -255,18 +242,27 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
         } catch (IOException | LineUnavailableException | InterruptedException ex) {
             System.out.println("error connecting to server");
             Logger.getLogger(ClientWindow.class.getName()).log(Level.SEVERE, null, ex);   
+            return false;
         }
+        return true;
     }
+    
     
     private void sendMessage() {
         if(messageBox.getText().equals(""))
             return;
-        Message message = new Message(nameField.getText(), messageBox.getText());
-        chatArea.append(clientName + ": " + message.msg + "\n");
+        sendMessage(messageBox.getText());
+        
+        chatArea.append(clientName + ": " + messageBox.getText() + "\n");
         messageBox.setText("");
+    }
+    
+    private void sendMessage(String text) {
+        if(text.equals(""))
+            return;
+        Message msg = new Message(text);
         try {
-            ((SoundWindow.PublicSpeaker)sw.chatter).sendObject(message);
-//            oos.writeObject(message);
+            ((SoundWindow.PublicSpeaker) sw.chatter).sendObject(msg);
         } catch (IOException ex) {
             System.out.println(ex.getMessage());
             Logger.getLogger(ClientWindow.class.getName()).log(Level.SEVERE, null, ex);
@@ -312,10 +308,12 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
             names.add(list.substring(start,commaIndex));
             start = commaIndex + 1;
         }
+        chatArea.append("Online users: " + list.substring(0, list.length()-1) + "\n");
         userList.updateUI();
     }
 
     private void setClientName(String newName) {
+        chatArea.append("Name set to: " + newName + "\n");
         clientName = newName;
     }
     
@@ -351,26 +349,24 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
                 
                 try {
                     Message m;
-                    //System.out.println("about to read object");
-//                    Object x = ois.readObject();
-//                    System.out.println(x.toString());
-//                    m = (Message)x;//(Message) ois.readObject();
                     m = (Message)ois.readObject();
                     
                     if(m.msg != null) // text based message
                     {
-//                        System.out.println("chat received");
-                        if(m.msg.startsWith("/list:"))
+                        if(m.msg.startsWith("/list:") && m.name.equals(SERVER_NAME))
                             parent.setList(m.msg.substring("/list:".length()));
-                        else if(m.msg.startsWith("/name:"))
+                        else if(m.msg.startsWith("/name:") && m.name.equals(SERVER_NAME))
                             parent.setClientName(m.msg.substring("/name:".length()));
-                        chatArea.append(m.name + ": " + m.msg + "\n");
-                        if(chatArea.getLineCount() > 20)
-                            try {
-                                chatArea.replaceRange(null, 0, chatArea.getLineEndOffset(0));
-                        } catch (BadLocationException ex) {
-                            System.out.println("Could not clear old chatArea lines.");
-                            Logger.getLogger(ClientWindow.class.getName()).log(Level.SEVERE, null, ex);
+                        else
+                        {
+                            chatArea.append(m.name + ": " + m.msg + "\n");
+                            if(chatArea.getLineCount() > 20)
+                                try {
+                                    chatArea.replaceRange(null, 0, chatArea.getLineEndOffset(0));
+                            } catch (BadLocationException ex) {
+                                System.out.println("Could not clear old chatArea lines.");
+                                Logger.getLogger(ClientWindow.class.getName()).log(Level.SEVERE, null, ex);
+                            }
                         }
                     }
                     else if(m.byteArray != null) // data based, or sound message
