@@ -17,6 +17,7 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.sound.sampled.LineUnavailableException;
@@ -33,10 +34,12 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
     volatile InputStream in;
     volatile OutputStream out;
     public Receiver recv;
+    String clientName;
     
     private DummySpeaker dummySpeaker;
     private Thread dst;
     private Socket sock2;
+    ArrayList<String> names;
     /**
      * Creates new form ClientWindow
      */
@@ -45,6 +48,7 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
     }
 
     public ClientWindow(SoundWindow soundWindow, String name, int port, InetAddress serverIP, int serverPort) {
+        names = new ArrayList<>();
         sw = soundWindow;
         initComponents();
         nameField.setText(name);
@@ -105,9 +109,8 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
         ((DefaultCaret)chatArea.getCaret()).setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
 
         userList.setModel(new javax.swing.AbstractListModel() {
-            String[] strings = { "Item 1", "Item 2", "Item 3", "Item 4", "Item 5" };
-            public int getSize() { return strings.length; }
-            public Object getElementAt(int i) { return strings[i]; }
+            public int getSize() { return names.size(); }
+            public Object getElementAt(int i) { return names.get(i); }
         });
         jScrollPane2.setViewportView(userList);
 
@@ -226,7 +229,7 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
             System.out.println("Socket on client side created");
             in = sock.getInputStream();
             out = sock.getOutputStream();
-            recv = new Receiver();
+            recv = new Receiver(this);
             recv.start();
             sw.getPubSpkr(out, nameField.getText());
             
@@ -259,7 +262,7 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
         if(messageBox.getText().equals(""))
             return;
         Message message = new Message(nameField.getText(), messageBox.getText());
-        chatArea.append(message.name + ": " + message.msg + "\n");
+        chatArea.append(clientName + ": " + message.msg + "\n");
         messageBox.setText("");
         try {
             ((SoundWindow.PublicSpeaker)sw.chatter).sendObject(message);
@@ -299,6 +302,22 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
 //        dummySpeaker = null;
         
     }
+
+    private void setList(String list) { // format of list is name,name2,name3, etc
+        int start = 0;
+        names.clear();
+        while(list.indexOf(',', start) != -1)
+        {
+            int commaIndex = list.indexOf(',', start);
+            names.add(list.substring(start,commaIndex));
+            start = commaIndex + 1;
+        }
+        userList.updateUI();
+    }
+
+    private void setClientName(String newName) {
+        clientName = newName;
+    }
     
 //    static int numSounds = 0;
 //    static int zsdf2;
@@ -306,6 +325,11 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
         boolean stop = false;
         MixerPlayer mP;
         ObjectInputStream ois;
+        ClientWindow parent;
+        
+        private Receiver(ClientWindow par) {
+            parent = par;
+        }
         
         @Override
         public void run(){
@@ -332,9 +356,14 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
 //                    System.out.println(x.toString());
 //                    m = (Message)x;//(Message) ois.readObject();
                     m = (Message)ois.readObject();
-                    if(m.msg != null)
+                    
+                    if(m.msg != null) // text based message
                     {
 //                        System.out.println("chat received");
+                        if(m.msg.startsWith("/list:"))
+                            parent.setList(m.msg.substring("/list:".length()));
+                        else if(m.msg.startsWith("/name:"))
+                            parent.setClientName(m.msg.substring("/name:".length()));
                         chatArea.append(m.name + ": " + m.msg + "\n");
                         if(chatArea.getLineCount() > 20)
                             try {
@@ -344,13 +373,9 @@ public class ClientWindow extends javax.swing.JFrame implements AutoCloseable{
                             Logger.getLogger(ClientWindow.class.getName()).log(Level.SEVERE, null, ex);
                         }
                     }
-                    else if(m.byteArray != null)
+                    else if(m.byteArray != null) // data based, or sound message
                     {
-                       // System.out.println("sound received");
                         sMixer.addSound(m);
-    //                        numSounds++;
-    //                        System.out.println(numSounds + " sound received");
-//                        sw.chatter.playSound(m.byteArray);
                     }
                     else
                     {
