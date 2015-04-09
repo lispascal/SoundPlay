@@ -35,11 +35,11 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
      * Creates new form serverWindow2
      */
     
-    public ConnAcceptor connAcceptor;
+    ConnAcceptor connAcceptor;
     PingResponder pingResponder;
     SoundWindow parent;
     final private int PING_PORT = 3001;
-    
+    final private String SERVER_NAME = "SERVER";
     public ServerWindow(SoundWindow parentRef) {
         parent = parentRef;
         this.addWindowListener(new WindowAdapter() {
@@ -116,6 +116,10 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
     }//GEN-LAST:event_exitButtonActionPerformed
 
     synchronized void refreshOnlineList() {
+        connAcceptor.regenConnStrings();
+        for(ChatConnection eachConn : connAcceptor.getConnList())
+            eachConn.serveList(false);
+            
         onlineList.updateUI();
     }
     
@@ -256,10 +260,13 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
             return connStrings;
         }
         
-        synchronized private void addToConns(ChatConnection newConn){
+        synchronized private void addToConns(ChatConnection newConn) {
             conns.add(newConn);
-            regenConnStrings();
         }
+        synchronized private void removeFromConns(ChatConnection conn) {
+            conns.remove(conn);
+        }
+        
         synchronized private void regenConnStrings() {
             connStrings.clear();
             for(ChatConnection i : conns)
@@ -342,12 +349,17 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
         }
         
         void changeName(String newName) throws IOException {
-            if(newName == null || newName.length() == 0)
-                return;
+            if(newName == null)
+                newName = "guest";
+            if(newName.contains(",")) // sanitize name
+                newName = newName.substring(0, newName.indexOf(','));
+            if(newName.length() == 0)
+                newName = "guest";
+            
             setConnName(newName);
             parent.regenConnStrings();
             parent.parent.refreshOnlineList();
-            Message m = new Message(getConnName(), "/name:" + newName);
+            Message m = new Message(SERVER_NAME, "/name:" + newName);
             writeMessage(m);
         }
         
@@ -366,45 +378,55 @@ public class ServerWindow extends javax.swing.JFrame implements AutoCloseable {
 
                     Message m ;
                     m = (Message) ois.readObject();
-                    if(m.msg != null)
+                    if(m.msg != null && m.msg.startsWith("/")) // if user is attempting a command
                     {
-                        if(m.msg.startsWith("/"))
-                        {
-                            if(m.msg.startsWith("/nick "))
-                                changeName(m.msg.substring("/nick ".length()));
-                            else if(m.msg.contentEquals("/list"))
-                                serveList();
-                            else
-                                writeMessage(new Message(m.name, "/command does not exist"));
+                        if(m.msg.startsWith("/nick "))
+                            changeName(m.msg.substring("/nick ".length())); // whole string after "/nick "
+                        else if(m.msg.startsWith("/name "))
+                            changeName(m.msg.substring("/name ".length())); // whole string after "/name "
+                        else if(m.msg.contentEquals("/list") || m.msg.contentEquals("/who"))
+                            serveList(true);
+                        else
+                            writeMessage(new Message(SERVER_NAME, "command does not exist"));
+                    }
+                    else // if literally anything else. Voice or text messages, but no commands
+                    {
+                        m.name = getConnName();
+                        for (ChatConnection eachConn : parent.getConnList()) {
+                            if (eachConn != this) {
+                                eachConn.writeMessage(m);
+                            }
                         }
                     }
-                    
-                    for(ChatConnection eachConn : parent.getConnList())
-                    {
-                        if(eachConn != this)
-                            eachConn.writeMessage(m);
-                    }
-
                 } catch (ClassNotFoundException ex) {
                     Logger.getLogger(ServerWindow.class.getName()).log(Level.SEVERE, null, ex);
                     break;
                 } catch ( IOException ex ){
                     Logger.getLogger(ServerWindow.class.getName()).log(Level.SEVERE, null, ex);
                     System.out.println("removing " + name + " from connection list");
-                    parent.conns.remove(this);
+                    parent.removeFromConns(this);
                     parent.parent.refreshOnlineList();
                     break;
                 }
             }
         }
 
-        private void serveList() throws IOException {
-            StringBuilder s = new StringBuilder();
-            s.append("/list:");
-            for(String i : parent.getConnStrings())
-                s.append(i.substring(0, i.lastIndexOf('='))).append(",");
-            Message m = new Message(name, s.toString());
-            writeMessage(m);
+        private void serveList(boolean requested) {
+            try{
+                StringBuilder s = new StringBuilder();
+                s.append("/list:");
+                if(!requested)
+                    s.append(","); // tells client to hide the message
+                for(String i : parent.getConnStrings())
+                    s.append(i.substring(0, i.lastIndexOf('='))).append(",");
+                Message m = new Message(SERVER_NAME, s.toString());
+                writeMessage(m);
+            } catch ( IOException ex ){
+                Logger.getLogger(ServerWindow.class.getName()).log(Level.SEVERE, null, ex);
+                System.out.println("removing " + name + " from connection list");
+                parent.removeFromConns(this);
+                parent.parent.refreshOnlineList();
+            }
         }
     }
 }
