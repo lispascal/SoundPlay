@@ -1,35 +1,21 @@
 package soundplay;
 
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Line;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
 import javax.sound.sampled.TargetDataLine;
-import javax.swing.AbstractAction;
 import javax.swing.JFrame;
 
 /**
@@ -425,18 +411,19 @@ public class SoundWindow extends javax.swing.JFrame {
         ptt = oldptt;
     }
     
-    void getPubSpkr(OutputStream outputStream, String givenName) throws LineUnavailableException, InterruptedException, IOException {
+    void getPubSpkr(OutputStream outputStream) throws LineUnavailableException, InterruptedException, IOException {
 
         int micInt = MicList.getSelectedIndex();
         int speakerInt = SpeakerList.getSelectedIndex();
         
         TargetDataLine mic = getMic(micInt);
         SourceDataLine speaker = getSpeaker(speakerInt);
-        chatter = new PublicSpeaker(mic, speaker, outputStream, givenName);
+        chatter = new PublicSpeaker(mic, speaker, outputStream);
         chatterThread = new Thread((PublicSpeaker)chatter);
         chatterThread.start();
         
     }
+    
 //    
 //    void playSound(byte[] sound) {
 //        if(testing)
@@ -585,9 +572,12 @@ public class SoundWindow extends javax.swing.JFrame {
         private Chatter(TargetDataLine mic, SourceDataLine speaker) throws LineUnavailableException {
             m = mic;
             s = speaker;
-            m.open(m.getFormat(), 4408*4);
+            AudioFormat af = new AudioFormat(10000, 8, 1, true, true);
+//            m.open(m.getFormat(), 4408*4);
+            m.open(af);
             m.start();
-            s.open();
+//            s.open();
+            s.open(af);
             s.start();
         }
         void playSound(byte[] sound){
@@ -682,11 +672,9 @@ public class SoundWindow extends javax.swing.JFrame {
         volatile Boolean stop;
         volatile OutputStream out;
         public volatile ObjectOutputStream oos;
-        volatile String name;
-        public PublicSpeaker(TargetDataLine mic, SourceDataLine speaker, OutputStream outputStream, String givenName) throws LineUnavailableException, IOException {
+        public PublicSpeaker(TargetDataLine mic, SourceDataLine speaker, OutputStream outputStream) throws LineUnavailableException, IOException {
             super(mic, speaker);
             stop = false;
-            name = givenName;
             out = outputStream;
             oos = new ObjectOutputStream(out);
         }
@@ -703,7 +691,7 @@ public class SoundWindow extends javax.swing.JFrame {
                     byte[] b = recordSound();
                     if(b != null)
                     {
-                        Message msg = new Message(name, b);
+                        Message msg = new Message(b);
                         
                         if(msg.byteArray.length != 0)
                             sendObject(msg);
